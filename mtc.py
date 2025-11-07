@@ -6,14 +6,15 @@ import numpy as np
 from typing import Dict, List, Any
 
 # Import the database
-from materials_library import load_verified_mechanical_materials
+from Solbase import load_verified_mechanical_materials
+logo = "logo.png"
 
 # =============================================================================
 # 3D VISUALIZATION FUNCTIONS
 # =============================================================================
 
 def create_crystal_structure_plot(crystal_data: Dict, material_name: str) -> go.Figure:
-    """Create 3D crystal structure visualization"""
+    """Create complete 3D crystal structure visualization with all atoms"""
     
     if not crystal_data or not crystal_data.get("atomic_positions"):
         fig = go.Figure()
@@ -31,42 +32,74 @@ def create_crystal_structure_plot(crystal_data: Dict, material_name: str) -> go.
     
     fig = go.Figure()
     
-    # Element colors
+    # Element colors and sizes
     element_colors = {
         'Fe': '#FFA500', 'Al': '#BFBFBF', 'Si': '#F0E68C', 'O': '#FF0000',
         'Ti': '#808080', 'Cu': '#B87333', 'Cr': '#8DB6CD', 'Ni': '#50C878',
         'Mg': '#8A2BE2', 'C': '#000000', 'Mn': '#9ACD32'
     }
     
-    # Add atoms
+    # Atom sizes based on type
+    atom_sizes = {
+        'corner': 12, 'body_center': 15, 'face_center': 14,
+        'base_plane': 12, 'mid_plane': 12, 'fcc_corner': 12,
+        'fcc_face': 14, 'internal': 13
+    }
+    
+    # Add atoms with different colors and sizes based on type
     for atom in atoms:
         element = atom["element"]
+        atom_type = atom.get("type", "unknown")
+        
+        # Convert fractional to absolute coordinates
         x_abs = atom["x"] * lattice["a"]
         y_abs = atom["y"] * lattice["b"] 
         z_abs = atom["z"] * lattice["c"]
+        
+        # Determine color based on atom type
+        if atom_type == "corner":
+            color = element_colors.get(element, '#FF6B6B')  # Red for corners
+            name_suffix = " (Corner)"
+        elif atom_type == "body_center":
+            color = element_colors.get(element, '#4ECDC4')  # Teal for body center
+            name_suffix = " (Body Center)"
+        elif atom_type == "face_center":
+            color = element_colors.get(element, '#45B7D1')  # Blue for face centers
+            name_suffix = " (Face Center)"
+        elif atom_type in ["base_plane", "mid_plane"]:
+            color = element_colors.get(element, '#96CEB4')  # Green for HCP planes
+            name_suffix = f" ({atom_type.replace('_', ' ').title()})"
+        elif atom_type == "internal":
+            color = element_colors.get(element, '#FECA57')  # Yellow for internal
+            name_suffix = " (Internal)"
+        else:
+            color = element_colors.get(element, '#FF00FF')  # Magenta for unknown
+            name_suffix = ""
         
         fig.add_trace(go.Scatter3d(
             x=[x_abs], y=[y_abs], z=[z_abs],
             mode='markers',
             marker=dict(
-                size=15,
-                color=element_colors.get(element, '#FF00FF'),
+                size=atom_sizes.get(atom_type, 12),
+                color=color,
                 opacity=0.9,
                 line=dict(width=2, color='darkgray')
             ),
-            name=element,
+            name=f'{element}{name_suffix}',
             hovertemplate=(
                 f'Element: {element}<br>'
+                f'Type: {atom_type}<br>'
                 f'Position: ({atom["x"]:.3f}, {atom["y"]:.3f}, {atom["z"]:.3f})<br>'
+                f'Absolute: ({x_abs:.2f}, {y_abs:.2f}, {z_abs:.2f}) Å<br>'
                 '<extra></extra>'
             )
         ))
     
-    # Add unit cell
+    # Add unit cell edges
     unit_cell_edges = [
-        [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 0],
-        [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1],
-        [1, 0, 0], [1, 0, 1], [1, 1, 0], [1, 1, 1], [0, 1, 0], [0, 1, 1]
+        [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 0],  # Bottom face
+        [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1],  # Top face
+        [1, 0, 0], [1, 0, 1], [1, 1, 0], [1, 1, 1], [0, 1, 0], [0, 1, 1]  # Vertical edges
     ]
     
     edges_x, edges_y, edges_z = [], [], []
@@ -79,12 +112,22 @@ def create_crystal_structure_plot(crystal_data: Dict, material_name: str) -> go.
         x=edges_x, y=edges_y, z=edges_z,
         mode='lines',
         line=dict(color='black', width=4),
+        name='Unit Cell',
         showlegend=False,
         hoverinfo='none'
     ))
     
+    # Add crystal information to title
+    structure_info = crystal_data.get("description", "")
+    atoms_per_cell = crystal_data.get("atoms_per_unit_cell", "")
+    coordination = crystal_data.get("coordination_number", "")
+    
+    title = f"{material_name} - {crystal_data['structure_type']} Crystal Structure"
+    if atoms_per_cell:
+        title += f" ({atoms_per_cell} atoms/unit cell)"
+    
     fig.update_layout(
-        title=f"{material_name} - Crystal Structure",
+        title=title,
         scene=dict(
             xaxis_title="X (Å)",
             yaxis_title="Y (Å)", 
@@ -93,7 +136,8 @@ def create_crystal_structure_plot(crystal_data: Dict, material_name: str) -> go.
             camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
         ),
         height=600,
-        showlegend=True
+        showlegend=True,
+        margin=dict(l=0, r=0, b=0, t=40)
     )
     
     return fig
@@ -180,17 +224,35 @@ class MechanicalEngineeringMaterialsApp:
                 st.write(f"**Space Group**: {crystal_data['space_group']}")
                 st.write(f"**Coordination Number**: {crystal_data['coordination_number']}")
                 st.write(f"**Atomic Packing Factor**: {crystal_data['atomic_packing_factor']}")
+                st.write(f"**Atoms per Unit Cell**: {crystal_data.get('atoms_per_unit_cell', 'N/A')}")
+                
+                if "description" in crystal_data:
+                    st.info(f"**Structure Description**: {crystal_data['description']}")
                 
                 st.subheader("Lattice Parameters")
                 lat = crystal_data["lattice_parameters"]
                 st.write(f"**a**: {lat['a']} Å")
                 st.write(f"**b**: {lat['b']} Å")
                 st.write(f"**c**: {lat['c']} Å")
+                st.write(f"**α**: {lat['alpha']}°")
+                st.write(f"**β**: {lat['beta']}°")
+                st.write(f"**γ**: {lat['gamma']}°")
             
             with col2:
                 st.subheader("3D Crystal Structure")
+                st.info("💡 **Color Code**: Red = Corners, Blue = Face Centers, Teal = Body Center, Green = HCP Planes, Yellow = Internal")
                 fig = create_crystal_structure_plot(crystal_data, material["name"])
                 st.plotly_chart(fig, use_container_width=True)
+                
+                # Add atom type legend
+                with st.expander("📖 Atom Type Legend"):
+                    st.write("""
+                    - **Corner Atoms** (Red): Shared between 8 adjacent unit cells
+                    - **Face Center Atoms** (Blue): Shared between 2 adjacent unit cells  
+                    - **Body Center Atoms** (Teal): Unique to each unit cell
+                    - **HCP Plane Atoms** (Green): Specific to hexagonal structures
+                    - **Internal Atoms** (Yellow): Additional positions in complex structures
+                    """)
         else:
             st.info("Crystal structure data not available for this material")
     
@@ -247,6 +309,44 @@ class MechanicalEngineeringMaterialsApp:
         for insight in material["educational_insights"]:
             st.info(f"💡 {insight}")
         
+        # Crystal structure insights if available
+        if "crystal_structure" in material:
+            crystal = material["crystal_structure"]
+            st.subheader("🔬 Crystal Structure Insights")
+            
+            if crystal["structure_type"] == "BCC":
+                st.write("""
+                **Body-Centered Cubic (BCC):**
+                - 8 nearest neighbors (coordination number = 8)
+                - Lower packing density (68%) than FCC
+                - Exhibits ductile-to-brittle transition temperature
+                - Common in ferritic steels at room temperature
+                """)
+            elif crystal["structure_type"] == "FCC":
+                st.write("""
+                **Face-Centered Cubic (FCC):**
+                - 12 nearest neighbors (coordination number = 12)
+                - Highest packing density (74%) for monatomic crystals
+                - Multiple slip systems enable excellent ductility
+                - Common in austenitic steels and many non-ferrous metals
+                """)
+            elif crystal["structure_type"] == "HCP":
+                st.write("""
+                **Hexagonal Close-Packed (HCP):**
+                - 12 nearest neighbors (coordination number = 12)
+                - Same packing density as FCC (74%) but different symmetry
+                - Limited slip systems at room temperature
+                - Anisotropic mechanical properties
+                """)
+            elif crystal["structure_type"] == "Diamond Cubic":
+                st.write("""
+                **Diamond Cubic:**
+                - 4 nearest neighbors (tetrahedral coordination)
+                - Very low packing density (34%) due to directional bonding
+                - Covalent bonding makes materials hard and brittle
+                - Characteristic of semiconductors like silicon and diamond
+                """)
+        
         # Learning objectives
         st.subheader("🎯 Why Important for Mechanical Engineers")
         st.write("""
@@ -255,6 +355,7 @@ class MechanicalEngineeringMaterialsApp:
         - It demonstrates key material science principles
         - It shows important property trade-offs relevant to design
         - It's widely used in real engineering applications
+        - Understanding its crystal structure helps predict mechanical behavior
         """)
     
     def display_sources(self, material: Dict):
@@ -271,6 +372,7 @@ class MechanicalEngineeringMaterialsApp:
         - Properties from manufacturer datasheets when available
         - Crystal structures from crystallographic databases
         - Mechanical properties tested according to standard methods
+        - Crystal structures include complete unit cell representation
         """)
     
     def show_comparison_tool(self):
@@ -290,15 +392,17 @@ class MechanicalEngineeringMaterialsApp:
         
         comparison_type = st.selectbox(
             "Comparison Type:",
-            ["Mechanical Properties", "Physical Properties", "Cost vs Performance"]
+            ["Mechanical Properties", "Physical Properties", "Cost vs Performance", "Crystal Structures"]
         )
         
         if comparison_type == "Mechanical Properties":
             self.compare_mechanical_properties(selected_materials, material_options)
         elif comparison_type == "Physical Properties":
             self.compare_physical_properties(selected_materials, material_options)
-        else:
+        elif comparison_type == "Cost vs Performance":
             self.compare_cost_performance(selected_materials, material_options)
+        else:
+            self.compare_crystal_structures(selected_materials, material_options)
     
     def compare_mechanical_properties(self, selected_materials, material_options):
         """Compare mechanical properties"""
@@ -375,6 +479,23 @@ class MechanicalEngineeringMaterialsApp:
         fig.update_traces(textposition='top center', marker=dict(size=15))
         st.plotly_chart(fig, use_container_width=True)
     
+    def compare_crystal_structures(self, selected_materials, material_options):
+        """Compare crystal structures"""
+        st.subheader("Crystal Structure Comparison")
+        
+        for material_name in selected_materials:
+            material_key = material_options[material_name]
+            material_data = self.materials_data[material_key]
+            
+            if "crystal_structure" in material_data:
+                crystal = material_data["crystal_structure"]
+                st.write(f"**{material_name}**: {crystal['structure_type']} - {crystal.get('description', '')}")
+                st.write(f"Coordination Number: {crystal['coordination_number']}, Packing Factor: {crystal['atomic_packing_factor']}")
+            else:
+                st.write(f"**{material_name}**: Crystal structure data not available")
+            
+            st.write("---")
+    
     def browse_materials(self):
         """Browse materials by category"""
         st.header("📚 Materials Database")
@@ -422,18 +543,18 @@ class MechanicalEngineeringMaterialsApp:
         st.markdown("""
         ## Essential Materials for Mechanical Engineers
         
-        Follow this learning path to understand the most important materials:
+        Follow this learning path to understand the most important materials and their crystal structures:
         """)
         
         learning_path = {
             "Phase 1: Foundation Materials": [
-                "aisi_1020", "al_6061", "gray_cast_iron", "abs_plastic"
+                "aisi_1020", "al_6061"
             ],
             "Phase 2: Core Engineering Materials": [
-                "aisi_1040", "ss_304", "aisi_4140", "copper_etp"
+                "ss_304", "silicon"
             ],
             "Phase 3: Advanced/Specialized Materials": [
-                "al_7075", "ti_6al_4v"
+                "ti_6al_4v"
             ]
         }
         
@@ -444,34 +565,72 @@ class MechanicalEngineeringMaterialsApp:
             for idx, material_key in enumerate(material_keys):
                 with cols[idx]:
                     material = self.materials_data[material_key]
+                    crystal = material.get("crystal_structure", {})
+                    
                     st.write(f"**{material['name']}**")
+                    st.write(f"Structure: {crystal.get('structure_type', 'N/A')}")
                     st.write(f"Yield: {material['properties']['yield_strength']} MPa")
                     st.write(f"Density: {material['properties']['density']} g/cm³")
                     
                     if st.button(f"Study {material['name']}", key=f"learn_{material_key}"):
                         self.display_material_details(material_key)
+        
+        # Crystal structure learning section
+        st.subheader("🔬 Understanding Crystal Structures")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.info("""
+            **BCC (Body-Centered Cubic):**
+            - 8 corner atoms + 1 center atom
+            - Coordination number: 8
+            - Packing efficiency: 68%
+            - Examples: α-iron, chromium, tungsten
+            """)
+            
+            st.info("""
+            **FCC (Face-Centered Cubic):**
+            - 8 corner atoms + 6 face atoms  
+            - Coordination number: 12
+            - Packing efficiency: 74%
+            - Examples: γ-iron, aluminum, copper, nickel
+            """)
+        
+        with col2:
+            st.info("""
+            **HCP (Hexagonal Close-Packed):**
+            - 6 atoms in hexagonal arrangement
+            - Coordination number: 12
+            - Packing efficiency: 74%
+            - Examples: magnesium, titanium, zinc
+            """)
+            
+            st.info("""
+            **Diamond Cubic:**
+            - 8 atoms in complex arrangement
+            - Coordination number: 4
+            - Packing efficiency: 34%
+            - Examples: diamond, silicon, germanium
+            """)
     
     def run(self):
         """Main application runner"""
         st.set_page_config(
             page_title="Mechanical Engineering Materials Database",
-            page_icon="⚙️",
+            page_icon=logo,
             layout="wide",
             initial_sidebar_state="expanded"
         )
-        
         st.title("⚙️ Mechanical Engineering Materials Database")
-        st.markdown("""
-        Explore **verified materials data** for mechanical engineering education.
-        All data sourced from **ASM Handbooks, MatWeb, and industry standards**.
-        """)
+        st.logo(logo)
         
         # Sidebar
         st.sidebar.title("🧭 Navigation")
         
         app_mode = st.sidebar.radio(
             "Select Mode:",
-            ["📚 Browse Materials", "📈 Compare Materials", "🎓 Learning Guide"]
+            ["📚 Browse Materials", "📈 Compare Materials", "🎓 Quick look!"]
         )
         
         st.sidebar.title("📊 Database Info")
@@ -484,6 +643,8 @@ class MechanicalEngineeringMaterialsApp:
             st.sidebar.write(f"• {cat.replace('_', ' ').title()}: {count} materials")
         
         st.sidebar.info(f"**Total Materials**: {len(self.materials_data)}")
+        
+        
         
         # Main content
         if app_mode == "📚 Browse Materials":
