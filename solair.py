@@ -208,7 +208,7 @@ class MechanicalEngineeringMaterialsApp:
             st.metric("Thermal Expansion", f"{props['thermal_expansion']} μm/m·K")
             st.metric("Electrical Resistivity", f"{props['electrical_resistivity']:.2e} Ω·m")
             st.metric("Fracture Toughness", f"{props['fracture_toughness']} MPa√m")
-            st.metric("Relative Cost", f"{props['cost_index']} (vs 1020 steel)")
+            
     
     def display_crystal_structure(self, material: Dict, material_key: str):
         """Display crystal structure"""
@@ -240,22 +240,10 @@ class MechanicalEngineeringMaterialsApp:
             
             with col2:
                 st.subheader("3D Crystal Structure")
-                st.info("💡 **Color Code**: Red = Corners, Blue = Face Centers, Teal = Body Center, Green = HCP Planes, Yellow = Internal")
                 fig = create_crystal_structure_plot(crystal_data, material["name"])
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Add atom type legend
-                with st.expander("📖 Atom Type Legend"):
-                    st.write("""
-                    - **Corner Atoms** (Red): Shared between 8 adjacent unit cells
-                    - **Face Center Atoms** (Blue): Shared between 2 adjacent unit cells  
-                    - **Body Center Atoms** (Teal): Unique to each unit cell
-                    - **HCP Plane Atoms** (Green): Specific to hexagonal structures
-                    - **Internal Atoms** (Yellow): Additional positions in complex structures
-                    """)
-        else:
-            st.info("Crystal structure data not available for this material")
-    
+                
     def display_applications(self, material: Dict):
         """Display applications and characteristics"""
         col1, col2 = st.columns(2)
@@ -362,18 +350,12 @@ class MechanicalEngineeringMaterialsApp:
         """Display data sources"""
         st.subheader("📚 Verified Data Sources")
         
+        
         st.write("**Primary Sources:**")
         for source in material.get("sources", []):
             st.write(f"• {source}")
         
-        st.info("""
-        **Data Quality Assurance:**
-        - All values verified against industry standards (ASM, ASTM)
-        - Properties from manufacturer datasheets when available
-        - Crystal structures from crystallographic databases
-        - Mechanical properties tested according to standard methods
-        - Crystal structures include complete unit cell representation
-        """)
+
     
     def show_comparison_tool(self):
         """Show material comparison tool"""
@@ -383,7 +365,7 @@ class MechanicalEngineeringMaterialsApp:
         selected_materials = st.multiselect(
             "Select materials to compare:",
             options=list(material_options.keys()),
-            default=["AISI 1020 Steel", "6061 Aluminum", "304 Stainless Steel"]
+            default=[]
         )
         
         if len(selected_materials) < 2:
@@ -392,15 +374,13 @@ class MechanicalEngineeringMaterialsApp:
         
         comparison_type = st.selectbox(
             "Comparison Type:",
-            ["Mechanical Properties", "Physical Properties", "Cost vs Performance", "Crystal Structures"]
+            ["Mechanical Properties", "Physical Properties", "Crystal Structures"]
         )
         
         if comparison_type == "Mechanical Properties":
             self.compare_mechanical_properties(selected_materials, material_options)
         elif comparison_type == "Physical Properties":
             self.compare_physical_properties(selected_materials, material_options)
-        elif comparison_type == "Cost vs Performance":
-            self.compare_cost_performance(selected_materials, material_options)
         else:
             self.compare_crystal_structures(selected_materials, material_options)
     
@@ -458,26 +438,8 @@ class MechanicalEngineeringMaterialsApp:
         
         st.plotly_chart(fig, use_container_width=True)
     
-    def compare_cost_performance(self, selected_materials, material_options):
-        """Compare cost vs performance"""
-        costs = []
-        strengths = []
-        names = []
+    
         
-        for material_name in selected_materials:
-            material_key = material_options[material_name]
-            material_data = self.materials_data[material_key]
-            costs.append(material_data["properties"]["cost_index"])
-            strengths.append(material_data["properties"]["yield_strength"])
-            names.append(material_name)
-        
-        fig = px.scatter(
-            x=costs, y=strengths, text=names,
-            title="Cost vs Yield Strength",
-            labels={'x': 'Relative Cost Index', 'y': 'Yield Strength (MPa)'}
-        )
-        fig.update_traces(textposition='top center', marker=dict(size=15))
-        st.plotly_chart(fig, use_container_width=True)
     
     def compare_crystal_structures(self, selected_materials, material_options):
         """Compare crystal structures"""
@@ -536,113 +498,37 @@ class MechanicalEngineeringMaterialsApp:
         if selected_material_key:
             self.display_material_details(selected_material_key)
     
-    def show_learning_guide(self):
-        """Show learning guide"""
-        st.header("🎓 Mechanical Engineering Learning Guide")
-        
-        st.markdown("""
-        ## Essential Materials for Mechanical Engineers
-        
-        Follow this learning path to understand the most important materials and their crystal structures:
-        """)
-        
-        learning_path = {
-            "Phase 1: Foundation Materials": [
-                "aisi_1020", "al_6061"
-            ],
-            "Phase 2: Core Engineering Materials": [
-                "ss_304", "silicon"
-            ],
-            "Phase 3: Advanced/Specialized Materials": [
-                "ti_6al_4v"
-            ]
-        }
-        
-        for phase_name, material_keys in learning_path.items():
-            st.subheader(phase_name)
-            
-            cols = st.columns(len(material_keys))
-            for idx, material_key in enumerate(material_keys):
-                with cols[idx]:
-                    material = self.materials_data[material_key]
-                    crystal = material.get("crystal_structure", {})
-                    
-                    st.write(f"**{material['name']}**")
-                    st.write(f"Structure: {crystal.get('structure_type', 'N/A')}")
-                    st.write(f"Yield: {material['properties']['yield_strength']} MPa")
-                    st.write(f"Density: {material['properties']['density']} g/cm³")
-                    
-                    if st.button(f"Study {material['name']}", key=f"learn_{material_key}"):
-                        self.display_material_details(material_key)
-        
-        # Crystal structure learning section
-        st.subheader("🔬 Understanding Crystal Structures")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.info("""
-            **BCC (Body-Centered Cubic):**
-            - 8 corner atoms + 1 center atom
-            - Coordination number: 8
-            - Packing efficiency: 68%
-            - Examples: α-iron, chromium, tungsten
-            """)
-            
-            st.info("""
-            **FCC (Face-Centered Cubic):**
-            - 8 corner atoms + 6 face atoms  
-            - Coordination number: 12
-            - Packing efficiency: 74%
-            - Examples: γ-iron, aluminum, copper, nickel
-            """)
-        
-        with col2:
-            st.info("""
-            **HCP (Hexagonal Close-Packed):**
-            - 6 atoms in hexagonal arrangement
-            - Coordination number: 12
-            - Packing efficiency: 74%
-            - Examples: magnesium, titanium, zinc
-            """)
-            
-            st.info("""
-            **Diamond Cubic:**
-            - 8 atoms in complex arrangement
-            - Coordination number: 4
-            - Packing efficiency: 34%
-            - Examples: diamond, silicon, germanium
-            """)
+    
     
     def run(self):
         """Main application runner"""
         st.set_page_config(
-            page_title="Mechanical Engineering Materials Database",
+            page_title="MEMD",
             page_icon=logo,
             layout="wide",
             initial_sidebar_state="expanded"
         )
-        st.title("⚙️ Mechanical Engineering Materials Database")
+        
+        st.title("⚙️ Mechanical Engineering Materials Database(MEMD)")
+        
         st.logo(logo)
         
         # Sidebar
+        
+        
         st.sidebar.title("🧭 Navigation")
         
         app_mode = st.sidebar.radio(
             "Select Mode:",
-            ["📚 Browse Materials", "📈 Compare Materials", "🎓 Quick look!"]
+            ["📚 Browse Materials", "📈 Compare Materials"]
         )
         
         st.sidebar.title("📊 Database Info")
-        categories = {}
-        for material in self.materials_data.values():
-            cat = material["category"]
-            categories[cat] = categories.get(cat, 0) + 1
         
-        for cat, count in categories.items():
-            st.sidebar.write(f"• {cat.replace('_', ' ').title()}: {count} materials")
         
         st.sidebar.info(f"**Total Materials**: {len(self.materials_data)}")
+
+        
         
         
         
